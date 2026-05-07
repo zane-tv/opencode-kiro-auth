@@ -101,7 +101,8 @@ export class IdcAuthMethod {
             oidcRegion
           )
 
-          const profileArn = configuredProfileArn || readActiveProfileArnFromKiroCli()
+          const profileArn =
+            inputs?.profile_arn?.trim() || configuredProfileArn || readActiveProfileArnFromKiroCli()
           const serviceRegion = extractRegionFromArn(profileArn) || configuredServiceRegion
           let usage: any = { usedCount: 0, limitCount: 0, email: undefined }
           try {
