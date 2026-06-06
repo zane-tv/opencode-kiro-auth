@@ -3,6 +3,7 @@ import { KIRO_CONSTANTS } from '../constants.js'
 import type { KiroAuthDetails } from './types'
 
 const clientCache = new Map<string, { client: CodeWhispererStreamingClient; token: string }>()
+const KIRO_CLI_MAX_ATTEMPTS = 3
 
 export function createSdkClient(
   auth: KiroAuthDetails,
@@ -20,7 +21,8 @@ export function createSdkClient(
     region,
     endpoint: `https://q.${region}.amazonaws.com`,
     token: () => Promise.resolve({ token }),
-    maxAttempts: 1,
+    maxAttempts: KIRO_CLI_MAX_ATTEMPTS,
+    retryMode: 'standard',
     customUserAgent: [[KIRO_CONSTANTS.USER_AGENT]]
   })
 

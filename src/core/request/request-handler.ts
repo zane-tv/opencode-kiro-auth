@@ -29,6 +29,7 @@ export class RequestHandler {
   private retryStrategy: RetryStrategy
   private reauthInFlight: Promise<boolean> | null = null
   private lastFailedReauthAt = 0
+  private static kiroRequestQueue: Promise<void> = Promise.resolve()
 
   constructor(
     private accountManager: AccountManager,
@@ -51,7 +52,24 @@ export class RequestHandler {
       return fetch(input, init)
     }
 
-    return this.handleKiroRequest(url, init, showToast)
+    return this.enqueueKiroRequest(() => this.handleKiroRequest(url, init, showToast))
+  }
+
+  private async enqueueKiroRequest<T>(run: () => Promise<T>): Promise<T> {
+    const previous = RequestHandler.kiroRequestQueue
+    let release!: () => void
+
+    RequestHandler.kiroRequestQueue = new Promise((resolve) => {
+      release = resolve
+    })
+
+    await previous.catch(() => {})
+
+    try {
+      return await run()
+    } finally {
+      release()
+    }
   }
 
   private async handleKiroRequest(
