@@ -159,7 +159,7 @@ describe('Kiro CLI account sync', () => {
     }) as typeof fetch
 
     try {
-      const tokenEndpoint = 'https://login.example.com/oauth2/v2.0/token'
+      const tokenEndpoint = 'https://login.microsoftonline.com/tenant/oauth2/v2.0/token'
       const refreshed = await refreshAccessToken({
         refresh: encodeRefreshToken({
           refreshToken: 'old-refresh',
@@ -184,6 +184,9 @@ describe('Kiro CLI account sync', () => {
       expect(String(calls[0]!.init.body)).toContain('grant_type=refresh_token')
       expect(String(calls[0]!.init.body)).toContain('refresh_token=old-refresh')
       expect(String(calls[0]!.init.body)).toContain('client_id=client-id')
+      expect(String(calls[0]!.init.body)).toContain(
+        'scope=client-id%2Fuser_impersonation+offline_access'
+      )
       expect(refreshed.access).toBe('new-access')
       expect(decodeRefreshToken(refreshed.refresh)).toMatchObject({
         refreshToken: 'new-refresh',

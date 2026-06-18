@@ -2,6 +2,14 @@ import { decodeRefreshToken, encodeRefreshToken } from '../kiro/auth'
 import { KiroTokenRefreshError } from './errors'
 import type { KiroAuthDetails, RefreshParts } from './types'
 
+function externalIdpRefreshScope(tokenEndpoint: string, clientId: string): string | undefined {
+  const host = new URL(tokenEndpoint).host
+  if (host === 'login.microsoftonline.com') {
+    return `${clientId}/user_impersonation offline_access`
+  }
+  return undefined
+}
+
 export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAuthDetails> {
   const p = decodeRefreshToken(auth.refresh)
   const isIdc = auth.authMethod === 'idc'
@@ -27,6 +35,8 @@ export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAut
         client_id: p.clientId!
       })
     : undefined
+  const scope = isExternalIdp ? externalIdpRefreshScope(p.tokenEndpoint!, p.clientId!) : undefined
+  if (formBody && scope) formBody.set('scope', scope)
   const requestBody: any = formBody
     ? formBody.toString()
     : isIdc
