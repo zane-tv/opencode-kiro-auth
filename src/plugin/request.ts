@@ -301,6 +301,7 @@ export function transformToCodeWhisperer(
         'x-amzn-kiro-agent-mode': 'vibe',
         'x-amz-user-agent': 'aws-sdk-js/3.738.0 KiroIDE',
         'user-agent': ua,
+        ...(auth.authMethod === 'external-idp' ? { TokenType: 'EXTERNAL_IDP' } : {}),
         Connection: 'close'
       },
       body: JSON.stringify(request)

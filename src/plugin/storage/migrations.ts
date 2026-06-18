@@ -6,6 +6,7 @@ export function runMigrations(db: Database): void {
   migrateUsageTable(db)
   migrateStartUrlColumn(db)
   migrateOidcRegionColumn(db)
+  migrateTokenEndpointColumn(db)
   migrateDropRefreshTokenUniqueIndex(db)
 }
 
@@ -146,6 +147,14 @@ function migrateOidcRegionColumn(db: Database): void {
   }
   // Backfill: historically `region` was used for both service + OIDC.
   db.run('UPDATE accounts SET oidc_region = region WHERE oidc_region IS NULL OR oidc_region = \"\"')
+}
+
+function migrateTokenEndpointColumn(db: Database): void {
+  const columns = db.prepare('PRAGMA table_info(accounts)').all() as any[]
+  const names = new Set(columns.map((c) => c.name))
+  if (!names.has('token_endpoint')) {
+    db.run('ALTER TABLE accounts ADD COLUMN token_endpoint TEXT')
+  }
 }
 
 function migrateDropRefreshTokenUniqueIndex(db: Database): void {

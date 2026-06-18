@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { decodeRefreshToken, encodeRefreshToken } from '../kiro/auth.js'
 import { mergeAccounts } from '../plugin/storage/locked-operations.js'
+import { getKiroCliTokenAuthMethod } from '../plugin/sync/kiro-cli.js'
 import { getStaleKiroCliAccountIds } from '../plugin/sync/stale-accounts.js'
+import { refreshAccessToken } from '../plugin/token.js'
 import type { ManagedAccount } from '../plugin/types.js'
 
 function account(overrides: Partial<ManagedAccount> = {}): ManagedAccount {
@@ -89,5 +92,107 @@ describe('Kiro CLI account sync', () => {
         [synced]
       )
     ).toEqual(['old-id', 'old-cli-synced-id'])
+  })
+
+  test('classifies external IdP CLI tokens separately from desktop tokens', () => {
+    expect(getKiroCliTokenAuthMethod('kirocli:external-idp:token', {})).toBe('external-idp')
+    expect(
+      getKiroCliTokenAuthMethod('kirocli:any:token', { token_endpoint: 'https://idp/token' })
+    ).toBe('external-idp')
+    expect(getKiroCliTokenAuthMethod('kirocli:odic:token', {})).toBe('idc')
+    expect(getKiroCliTokenAuthMethod('kirocli:social:token', {})).toBe('desktop')
+  })
+
+  test('deactivates previous desktop placeholder when external IdP replaces it', () => {
+    const synced = {
+      id: 'current-external-idp',
+      email: 'user@example.com',
+      authMethod: 'external-idp' as const,
+      clientId: 'client-current',
+      profileArn: 'arn:aws:codewhisperer:us-east-1:123:profile/current'
+    }
+
+    const staleDesktopPlaceholder = {
+      id: 'old-desktop-placeholder',
+      email: 'desktop-placeholder+abc@awsapps.local',
+      auth_method: 'desktop',
+      client_id: synced.clientId,
+      profile_arn: null,
+      last_sync: Date.now() - 1000
+    }
+
+    expect(getStaleKiroCliAccountIds([synced, staleDesktopPlaceholder], [synced])).toEqual([
+      'old-desktop-placeholder'
+    ])
+  })
+
+  test('round-trips external IdP refresh token metadata', () => {
+    const encoded = encodeRefreshToken({
+      refreshToken: 'refresh-token',
+      clientId: 'client-id',
+      tokenEndpoint: 'https://login.example.com/oauth2/v2.0/token',
+      authMethod: 'external-idp'
+    })
+
+    expect(decodeRefreshToken(encoded)).toEqual({
+      refreshToken: 'refresh-token',
+      clientId: 'client-id',
+      tokenEndpoint: 'https://login.example.com/oauth2/v2.0/token',
+      authMethod: 'external-idp'
+    })
+  })
+
+  test('refreshes external IdP tokens through the stored token endpoint', async () => {
+    const originalFetch = globalThis.fetch
+    const calls: Array<{ url: string; init: RequestInit }> = []
+
+    globalThis.fetch = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init })
+      return new Response(
+        JSON.stringify({
+          access_token: 'new-access',
+          refresh_token: 'new-refresh',
+          expires_in: 120
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    }) as typeof fetch
+
+    try {
+      const tokenEndpoint = 'https://login.example.com/oauth2/v2.0/token'
+      const refreshed = await refreshAccessToken({
+        refresh: encodeRefreshToken({
+          refreshToken: 'old-refresh',
+          clientId: 'client-id',
+          tokenEndpoint,
+          authMethod: 'external-idp'
+        }),
+        access: 'old-access',
+        expires: 0,
+        authMethod: 'external-idp',
+        region: 'us-east-1',
+        profileArn: 'arn:aws:codewhisperer:us-east-1:123:profile/current',
+        clientId: 'client-id',
+        tokenEndpoint
+      })
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.url).toBe(tokenEndpoint)
+      expect(calls[0]!.init.headers).toMatchObject({
+        'Content-Type': 'application/x-www-form-urlencoded'
+      })
+      expect(String(calls[0]!.init.body)).toContain('grant_type=refresh_token')
+      expect(String(calls[0]!.init.body)).toContain('refresh_token=old-refresh')
+      expect(String(calls[0]!.init.body)).toContain('client_id=client-id')
+      expect(refreshed.access).toBe('new-access')
+      expect(decodeRefreshToken(refreshed.refresh)).toMatchObject({
+        refreshToken: 'new-refresh',
+        clientId: 'client-id',
+        tokenEndpoint,
+        authMethod: 'external-idp'
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

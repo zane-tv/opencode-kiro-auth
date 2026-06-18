@@ -3,7 +3,7 @@ import { isPermanentError } from '../health'
 export type SyncedCliAccount = {
   id: string
   email: string
-  authMethod: 'idc' | 'desktop'
+  authMethod: 'idc' | 'desktop' | 'external-idp'
   clientId?: string
   profileArn?: string
 }
@@ -36,9 +36,14 @@ export function getStaleKiroCliAccountIds(
         const sameClient = !!clientId && clientId === synced.clientId
         const sameProfile = !!profileArn && profileArn === synced.profileArn
         const sameIdentity = sameEmail || sameClient || sameProfile
+        const correctedExternalIdp =
+          synced.authMethod === 'external-idp' && authMethod === 'desktop'
 
         if (sameAuthMethod && sameIdentity) return true
         if (sameAuthMethod && lastSync > 0) return true
+        if (correctedExternalIdp && sameIdentity) return true
+        if (correctedExternalIdp && lastSync > 0 && email?.startsWith('desktop-placeholder+'))
+          return true
         return isPermanentError(unhealthyReason) && sameIdentity
       })
     })

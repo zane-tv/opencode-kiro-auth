@@ -5,42 +5,58 @@ import type { KiroAuthDetails, RefreshParts } from './types'
 export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAuthDetails> {
   const p = decodeRefreshToken(auth.refresh)
   const isIdc = auth.authMethod === 'idc'
+  const isExternalIdp = auth.authMethod === 'external-idp'
   const oidcRegion = auth.oidcRegion || auth.region
-  const url = isIdc
-    ? `https://oidc.${oidcRegion}.amazonaws.com/token`
-    : `https://prod.${auth.region}.auth.desktop.kiro.dev/refreshToken`
+  const url = isExternalIdp
+    ? p.tokenEndpoint!
+    : isIdc
+      ? `https://oidc.${oidcRegion}.amazonaws.com/token`
+      : `https://prod.${auth.region}.auth.desktop.kiro.dev/refreshToken`
 
   if (isIdc && (!p.clientId || !p.clientSecret)) {
     throw new KiroTokenRefreshError('Missing creds', 'MISSING_CREDENTIALS')
   }
+  if (isExternalIdp && (!p.clientId || !p.tokenEndpoint)) {
+    throw new KiroTokenRefreshError('Missing external IdP creds', 'MISSING_CREDENTIALS')
+  }
 
-  const requestBody: any = isIdc
-    ? {
-        refreshToken: p.refreshToken,
-        clientId: p.clientId,
-        clientSecret: p.clientSecret,
-        grantType: 'refresh_token'
-      }
-    : {
-        refreshToken: p.refreshToken
-      }
+  const formBody = isExternalIdp
+    ? new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: p.refreshToken,
+        client_id: p.clientId!
+      })
+    : undefined
+  const requestBody: any = formBody
+    ? formBody.toString()
+    : isIdc
+      ? {
+          refreshToken: p.refreshToken,
+          clientId: p.clientId,
+          clientSecret: p.clientSecret,
+          grantType: 'refresh_token'
+        }
+      : {
+          refreshToken: p.refreshToken
+        }
 
-  const ua = isIdc
-    ? 'aws-sdk-js/3.738.0 ua/2.1 os/other lang/js md/browser#unknown_unknown api/sso-oidc#3.738.0 m/E KiroIDE'
-    : 'aws-sdk-js/3.0.0 KiroIDE-0.1.0 os/macos lang/js md/nodejs/18.0.0'
+  const ua =
+    isIdc || isExternalIdp
+      ? 'aws-sdk-js/3.738.0 ua/2.1 os/other lang/js md/browser#unknown_unknown api/sso-oidc#3.738.0 m/E KiroIDE'
+      : 'aws-sdk-js/3.0.0 KiroIDE-0.1.0 os/macos lang/js md/nodejs/18.0.0'
 
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': isExternalIdp ? 'application/x-www-form-urlencoded' : 'application/json',
         Accept: 'application/json',
         'amz-sdk-request': 'attempt=1; max=1',
         'x-amzn-kiro-agent-mode': 'vibe',
         'user-agent': ua,
         Connection: 'close'
       },
-      body: JSON.stringify(requestBody)
+      body: typeof requestBody === 'string' ? requestBody : JSON.stringify(requestBody)
     })
 
     if (!res.ok) {
@@ -66,6 +82,7 @@ export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAut
       refreshToken: d.refresh_token || d.refreshToken || p.refreshToken,
       clientId: p.clientId,
       clientSecret: p.clientSecret,
+      tokenEndpoint: p.tokenEndpoint,
       authMethod: auth.authMethod
     }
 
@@ -79,6 +96,7 @@ export async function refreshAccessToken(auth: KiroAuthDetails): Promise<KiroAut
       profileArn: auth.profileArn,
       clientId: auth.clientId,
       clientSecret: auth.clientSecret,
+      tokenEndpoint: auth.tokenEndpoint,
       email: auth.email || d.userInfo?.email
     }
   } catch (error) {

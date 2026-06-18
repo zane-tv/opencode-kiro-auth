@@ -19,6 +19,7 @@ export class AccountRepository {
       oidcRegion: r.oidc_region || undefined,
       clientId: r.client_id,
       clientSecret: r.client_secret,
+      tokenEndpoint: r.token_endpoint || undefined,
       profileArn: r.profile_arn,
       startUrl: r.start_url || undefined,
       refreshToken: r.refresh_token,

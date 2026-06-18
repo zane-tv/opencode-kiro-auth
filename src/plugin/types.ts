@@ -1,7 +1,7 @@
 import z from 'zod'
 import { RegionSchema } from './config/schema'
 
-export type KiroAuthMethod = 'idc' | 'desktop'
+export type KiroAuthMethod = 'idc' | 'desktop' | 'external-idp'
 export type KiroRegion = z.infer<typeof RegionSchema>
 
 export interface KiroAuthDetails {
@@ -13,6 +13,7 @@ export interface KiroAuthDetails {
   oidcRegion?: KiroRegion
   clientId?: string
   clientSecret?: string
+  tokenEndpoint?: string
   email?: string
   profileArn?: string
 }
@@ -21,6 +22,7 @@ export interface RefreshParts {
   refreshToken: string
   clientId?: string
   clientSecret?: string
+  tokenEndpoint?: string
   profileArn?: string
   authMethod?: KiroAuthMethod
 }
@@ -33,6 +35,7 @@ export interface ManagedAccount {
   oidcRegion?: KiroRegion
   clientId?: string
   clientSecret?: string
+  tokenEndpoint?: string
   profileArn?: string
   startUrl?: string
   refreshToken: string

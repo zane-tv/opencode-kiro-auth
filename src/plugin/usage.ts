@@ -25,7 +25,8 @@ export async function fetchUsageLimits(auth: KiroAuthDetails): Promise<any> {
           Authorization: `Bearer ${auth.access}`,
           'Content-Type': 'application/json',
           'x-amzn-kiro-agent-mode': 'vibe',
-          'amz-sdk-request': 'attempt=1; max=1'
+          'amz-sdk-request': 'attempt=1; max=1',
+          ...(auth.authMethod === 'external-idp' ? { TokenType: 'EXTERNAL_IDP' } : {})
         }
       })
 

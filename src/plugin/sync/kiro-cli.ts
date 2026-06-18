@@ -19,6 +19,17 @@ import {
   type SyncedCliAccount
 } from './stale-accounts'
 
+export function getKiroCliTokenAuthMethod(
+  key: string,
+  data: any
+): 'idc' | 'desktop' | 'external-idp' {
+  if (key.includes('external-idp') || typeof data?.token_endpoint === 'string') {
+    return 'external-idp'
+  }
+  if (key.includes('odic') || key.includes('oidc')) return 'idc'
+  return 'desktop'
+}
+
 export async function syncFromKiroCli() {
   const dbPath = getCliDbPath()
   if (!existsSync(dbPath)) return
@@ -50,12 +61,20 @@ export async function syncFromKiroCli() {
         const data = safeJsonParse(row.value)
         if (!data) continue
 
-        const isIdc = row.key.includes('odic')
-        const authMethod = isIdc ? 'idc' : 'desktop'
+        const authMethod = getKiroCliTokenAuthMethod(row.key, data)
+        const isIdc = authMethod === 'idc'
+        const isExternalIdp = authMethod === 'external-idp'
         const oidcRegion = normalizeRegion(data.region)
         let profileArn: string | undefined = data.profile_arn || data.profileArn
-        if (!profileArn && isIdc) profileArn = activeProfileArn || readActiveProfileArnFromKiroCli()
+        if (!profileArn && (isIdc || isExternalIdp))
+          profileArn = activeProfileArn || readActiveProfileArnFromKiroCli()
         const serviceRegion = extractRegionFromArn(profileArn) || oidcRegion
+        const tokenEndpoint: string | undefined =
+          typeof data.token_endpoint === 'string'
+            ? data.token_endpoint
+            : typeof data.tokenEndpoint === 'string'
+              ? data.tokenEndpoint
+              : undefined
         const startUrl: string | undefined =
           typeof data.start_url === 'string'
             ? data.start_url
@@ -73,6 +92,10 @@ export async function syncFromKiroCli() {
 
         if (authMethod === 'idc' && (!clientId || !clientSecret)) {
           logger.warn('Kiro CLI sync: missing IDC device credentials; skipping token import')
+          continue
+        }
+        if (authMethod === 'external-idp' && (!clientId || !tokenEndpoint)) {
+          logger.warn('Kiro CLI sync: missing external IdP credentials; skipping token import')
           continue
         }
 
@@ -94,6 +117,7 @@ export async function syncFromKiroCli() {
             profileArn,
             clientId,
             clientSecret,
+            tokenEndpoint,
             email: ''
           }
           const u = await fetchUsageLimits(authForUsage)
@@ -165,6 +189,7 @@ export async function syncFromKiroCli() {
                 oidcRegion: placeholderRow.oidc_region || oidcRegion,
                 clientId,
                 clientSecret,
+                tokenEndpoint,
                 profileArn,
                 refreshToken: placeholderRow.refresh_token || refreshToken,
                 accessToken: placeholderRow.access_token || accessToken,
@@ -190,6 +215,7 @@ export async function syncFromKiroCli() {
           oidcRegion,
           clientId,
           clientSecret,
+          tokenEndpoint,
           profileArn,
           startUrl,
           refreshToken,
@@ -232,7 +258,12 @@ export async function writeToKiroCli(acc: any) {
     const cliDb = new Database(dbPath)
     cliDb.run('PRAGMA busy_timeout = 5000')
     const rows = cliDb.prepare('SELECT key, value FROM auth_kv').all() as any[]
-    const targetKey = acc.authMethod === 'idc' ? 'kirocli:odic:token' : 'kirocli:social:token'
+    const targetKey =
+      acc.authMethod === 'idc'
+        ? 'kirocli:odic:token'
+        : acc.authMethod === 'external-idp'
+          ? 'kirocli:external-idp:token'
+          : 'kirocli:social:token'
     const row = rows.find((r) => r.key === targetKey || r.key.endsWith(targetKey))
     if (row) {
       const data = JSON.parse(row.value)

@@ -43,6 +43,7 @@ export class AccountManager {
       oidcRegion: r.oidc_region || undefined,
       clientId: r.client_id,
       clientSecret: r.client_secret,
+      tokenEndpoint: r.token_endpoint || undefined,
       profileArn: r.profile_arn,
       startUrl: r.start_url || undefined,
       refreshToken: r.refresh_token,
@@ -190,6 +191,7 @@ export class AccountManager {
       acc.refreshToken = p.refreshToken
       if (p.profileArn) acc.profileArn = p.profileArn
       if (p.clientId) acc.clientId = p.clientId
+      if (p.tokenEndpoint) acc.tokenEndpoint = p.tokenEndpoint
       acc.failCount = 0
       acc.isHealthy = true
       delete acc.unhealthyReason
@@ -266,6 +268,7 @@ export class AccountManager {
       profileArn: a.profileArn,
       clientId: a.clientId,
       clientSecret: a.clientSecret,
+      tokenEndpoint: a.tokenEndpoint,
       authMethod: a.authMethod
     }
     return {
@@ -278,6 +281,7 @@ export class AccountManager {
       profileArn: a.profileArn,
       clientId: a.clientId,
       clientSecret: a.clientSecret,
+      tokenEndpoint: a.tokenEndpoint,
       email: a.email
     }
   }

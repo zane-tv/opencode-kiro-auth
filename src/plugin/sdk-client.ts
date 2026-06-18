@@ -29,6 +29,9 @@ export function createSdkClient(
   client.middlewareStack.add(
     (next: any) => async (args: any) => {
       args.request.headers['x-amzn-kiro-agent-mode'] = 'vibe'
+      if (auth.authMethod === 'external-idp') {
+        args.request.headers.TokenType = 'EXTERNAL_IDP'
+      }
       return next(args)
     },
     { step: 'build', name: 'addKiroHeaders' }
