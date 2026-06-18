@@ -1,6 +1,24 @@
 import { KiroAuthDetails, ManagedAccount } from './types'
 
-export async function fetchUsageLimits(auth: KiroAuthDetails): Promise<any> {
+interface FetchUsageLimitsOptions {
+  timeoutMs?: number
+}
+
+const DEFAULT_USAGE_TIMEOUT_MS = 30000
+
+function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return {
+    signal: controller.signal,
+    dispose: () => clearTimeout(timer)
+  }
+}
+
+export async function fetchUsageLimits(
+  auth: KiroAuthDetails,
+  options: FetchUsageLimitsOptions = {}
+): Promise<any> {
   // Try different parameter combinations
   const attempts: Array<{ resourceType?: string; origin?: string }> = [
     { resourceType: 'AGENTIC_REQUEST', origin: 'AI_EDITOR' },
@@ -18,9 +36,11 @@ export async function fetchUsageLimits(auth: KiroAuthDetails): Promise<any> {
     if (params.resourceType) url.searchParams.set('resourceType', params.resourceType)
     if (auth.profileArn) url.searchParams.set('profileArn', auth.profileArn)
 
+    const timeout = createTimeoutSignal(options.timeoutMs ?? DEFAULT_USAGE_TIMEOUT_MS)
     try {
       const res = await fetch(url.toString(), {
         method: 'GET',
+        signal: timeout.signal,
         headers: {
           Authorization: `Bearer ${auth.access}`,
           'Content-Type': 'application/json',
@@ -73,6 +93,8 @@ export async function fetchUsageLimits(auth: KiroAuthDetails): Promise<any> {
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e))
       if (index < attempts.length - 1) continue
+    } finally {
+      timeout.dispose()
     }
   }
 

@@ -5,7 +5,7 @@ import type { KiroAuthDetails, RefreshParts } from './types'
 function externalIdpRefreshScope(tokenEndpoint: string, clientId: string): string | undefined {
   const host = new URL(tokenEndpoint).host
   if (host === 'login.microsoftonline.com') {
-    return `${clientId}/user_impersonation offline_access`
+    return `${clientId}/codewhisperer:conversations ${clientId}/codewhisperer:completions offline_access`
   }
   return undefined
 }

@@ -19,6 +19,23 @@ import {
   type SyncedCliAccount
 } from './stale-accounts'
 
+const KIRO_CLI_USAGE_TIMEOUT_MS = 5000
+
+export function shouldSkipKiroCliAccountImport(
+  existing: any | undefined,
+  cliAccessToken: string,
+  cliExpiresAt: number,
+  now = Date.now()
+): boolean {
+  return !!(
+    existing &&
+    existing.is_healthy === 1 &&
+    existing.access_token === cliAccessToken &&
+    existing.expires_at >= cliExpiresAt &&
+    existing.expires_at > now
+  )
+}
+
 export function getKiroCliTokenAuthMethod(
   key: string,
   data: any
@@ -120,7 +137,7 @@ export async function syncFromKiroCli() {
             tokenEndpoint,
             email: ''
           }
-          const u = await fetchUsageLimits(authForUsage)
+          const u = await fetchUsageLimits(authForUsage, { timeoutMs: KIRO_CLI_USAGE_TIMEOUT_MS })
           usedCount = u.usedCount || 0
           limitCount = u.limitCount || 0
           if (typeof u.email === 'string' && u.email) {
@@ -157,13 +174,7 @@ export async function syncFromKiroCli() {
 
         const id = createDeterministicAccountId(resolvedEmail, authMethod, clientId, profileArn)
         const existingById = all.find((a) => a.id === id)
-        if (
-          existingById &&
-          existingById.is_healthy === 1 &&
-          existingById.expires_at >= cliExpiresAt &&
-          existingById.expires_at > Date.now()
-        )
-          continue
+        if (shouldSkipKiroCliAccountImport(existingById, accessToken, cliExpiresAt)) continue
 
         if (usageOk) {
           const placeholderEmail = makePlaceholderEmail(

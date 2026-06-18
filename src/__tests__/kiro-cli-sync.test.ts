@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { decodeRefreshToken, encodeRefreshToken } from '../kiro/auth.js'
 import { mergeAccounts } from '../plugin/storage/locked-operations.js'
-import { getKiroCliTokenAuthMethod } from '../plugin/sync/kiro-cli.js'
+import {
+  getKiroCliTokenAuthMethod,
+  shouldSkipKiroCliAccountImport
+} from '../plugin/sync/kiro-cli.js'
 import { getStaleKiroCliAccountIds } from '../plugin/sync/stale-accounts.js'
 import { refreshAccessToken } from '../plugin/token.js'
 import type { ManagedAccount } from '../plugin/types.js'
@@ -103,6 +106,36 @@ describe('Kiro CLI account sync', () => {
     expect(getKiroCliTokenAuthMethod('kirocli:social:token', {})).toBe('desktop')
   })
 
+  test('imports CLI token when cached token differs even if cached expiry is later', () => {
+    const now = Date.now()
+
+    expect(
+      shouldSkipKiroCliAccountImport(
+        {
+          is_healthy: 1,
+          access_token: 'cached-access',
+          expires_at: now + 7200000
+        },
+        'cli-access',
+        now + 3600000,
+        now
+      )
+    ).toBe(false)
+
+    expect(
+      shouldSkipKiroCliAccountImport(
+        {
+          is_healthy: 1,
+          access_token: 'cli-access',
+          expires_at: now + 7200000
+        },
+        'cli-access',
+        now + 3600000,
+        now
+      )
+    ).toBe(true)
+  })
+
   test('deactivates previous desktop placeholder when external IdP replaces it', () => {
     const synced = {
       id: 'current-external-idp',
@@ -185,7 +218,7 @@ describe('Kiro CLI account sync', () => {
       expect(String(calls[0]!.init.body)).toContain('refresh_token=old-refresh')
       expect(String(calls[0]!.init.body)).toContain('client_id=client-id')
       expect(String(calls[0]!.init.body)).toContain(
-        'scope=client-id%2Fuser_impersonation+offline_access'
+        'scope=client-id%2Fcodewhisperer%3Aconversations+client-id%2Fcodewhisperer%3Acompletions+offline_access'
       )
       expect(refreshed.access).toBe('new-access')
       expect(decodeRefreshToken(refreshed.refresh)).toMatchObject({
